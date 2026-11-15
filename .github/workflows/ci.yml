@@ -1,0 +1,60 @@
+name: CI
+
+on:
+    pull_request:
+    push:
+        branches: [main]
+
+permissions:
+    contents: read
+
+concurrency:
+    group: ci-${{ github.ref }}
+    cancel-in-progress: true
+
+env:
+    # Until the @sbwp packages are on npm, events installs them from a platform checkout next to
+    # this repo (`file:../platform/packages/*`). This pins that checkout to a reviewed commit.
+    PLATFORM_REF: 18d338e83c45f0d1a2400a7893c61d0990d15af5
+
+jobs:
+    check:
+        name: Lint, type check, test and build
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  path: events
+                  persist-credentials: false
+            - uses: actions/checkout@v7
+              with:
+                  repository: celestialdreamentertainment/platform
+                  ref: ${{ env.PLATFORM_REF }}
+                  path: platform
+                  persist-credentials: false
+            - uses: jdx/mise-action@v5
+              with:
+                  working_directory: events
+            - name: Cache the pnpm store and MongoDB binaries
+              uses: actions/cache@v6
+              with:
+                  path: |
+                      ~/.local/share/pnpm/store
+                      ~/.cache/mongodb-binaries
+                  key: deps-${{ runner.os }}-${{ hashFiles('events/pnpm-lock.yaml', 'platform/pnpm-lock.yaml') }}
+                  restore-keys: deps-${{ runner.os }}-
+            - name: Build platform
+              working-directory: platform
+              run: |
+                  pnpm install --frozen-lockfile
+                  pnpm build
+            - working-directory: events
+              run: pnpm install --frozen-lockfile
+            - working-directory: events
+              run: pnpm lint
+            - working-directory: events
+              run: pnpm typecheck
+            - working-directory: events
+              run: pnpm test
+            - working-directory: events
+              run: pnpm build
