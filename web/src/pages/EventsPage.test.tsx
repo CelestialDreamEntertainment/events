@@ -16,7 +16,18 @@ describe('EventsPage', () => {
                         location: '',
                         visibility: 'private',
                         cancelled: true,
-                        myRsvp: { response: 'maybe', note: '' }
+                        myRsvp: { response: 'maybe', note: '' },
+                        surprise: {
+                            forName: 'Bob',
+                            cover: {
+                                title: 'Errands',
+                                description: '',
+                                location: '',
+                                startsAt: '2026-11-22T00:30:00.000Z',
+                                endsAt: '2026-11-22T02:00:00.000Z',
+                                timeZone: 'America/Chicago'
+                            }
+                        }
                     })
                 ]
             }
@@ -25,6 +36,7 @@ describe('EventsPage', () => {
         expect(screen.getByText('The big house')).toBeTruthy();
         expect(screen.getByText('Cancelled')).toBeTruthy();
         expect(screen.getByText('Private')).toBeTruthy();
+        expect(screen.getByText('Surprise')).toBeTruthy();
         expect(screen.getByText('Maybe')).toBeTruthy();
         expect(screen.getByRole('link', { name: 'Secret dinner' }).getAttribute('href')).toBe(
             '/events/e2'

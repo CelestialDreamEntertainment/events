@@ -1,4 +1,4 @@
-import type { Context, User } from '@sbwp/runtime';
+import { BadRequestError, type Context, type User } from '@sbwp/runtime';
 import { z } from 'zod';
 
 export const VISIBILITIES = ['public', 'private'] as const;
@@ -6,6 +6,29 @@ export type Visibility = (typeof VISIBILITIES)[number];
 
 export const RESPONSES = ['going', 'maybe', 'no'] as const;
 export type RsvpResponse = (typeof RESPONSES)[number];
+
+/** The made-up version of a surprise party that the people it's for see instead of the real one. */
+export type Cover = {
+    title: string;
+    description: string;
+    location: string;
+    startsAt: Date;
+    endsAt: Date;
+    /** The cover's own IANA time zone, so a trip out of town can pass for an evening at home. */
+    timeZone: string;
+};
+
+/**
+ * Makes an event a surprise party. The people in `for` (lowercased emails) see only the cover
+ * story, even on a private event they aren't invited to, and never the real details.
+ */
+export type Surprise = {
+    /** Their sign-in emails, which only the host sees. */
+    for: string[];
+    /** Who it's for, as everyone else in on it sees it, e.g. "Bob". */
+    forName: string;
+    cover: Cover;
+};
 
 /**
  * An event as stored. Public events are on everyone's calendar; private ones only show up for
@@ -22,6 +45,7 @@ export type EventDoc = {
     timeZone: string;
     visibility: Visibility;
     invitees: string[];
+    surprise: Surprise | null;
     hostId: string;
     hostEmail: string;
     hostName: string | null;
@@ -49,20 +73,34 @@ export const collections = (ctx: Context) => ({
     rsvps: ctx.db.collection<RsvpDoc>('rsvps')
 });
 
+/** Whether the event is a surprise for this user, who must only ever see its cover story. */
+export const isSurprised = (event: EventDoc, user: EventsUser): boolean =>
+    event.surprise?.for.includes(user.email.toLowerCase()) ?? false;
+
 /** Whether a user can see an event at all. Everything else is hidden behind a 404. */
 export const canSee = (event: EventDoc, user: EventsUser): boolean =>
     event.visibility === 'public' ||
     event.hostId === user.id ||
-    event.invitees.includes(user.email.toLowerCase());
+    event.invitees.includes(user.email.toLowerCase()) ||
+    isSurprised(event, user);
 
-/** The Mongo filter matching every event a user can see. */
-export const visibleTo = (user: EventsUser) => ({
-    $or: [
-        { visibility: 'public' as const },
-        { hostId: user.id },
-        { invitees: user.email.toLowerCase() }
-    ]
-});
+/**
+ * The Mongo filter matching every event a user can see whose shown end time matches `ends`: the
+ * cover story's for surprises they're the guest of honor at, the real one otherwise.
+ */
+export const visibleTo = (user: EventsUser, ends: Record<string, Date>) => {
+    const email = user.email.toLowerCase();
+    return {
+        $or: [
+            { 'surprise.for': email, 'surprise.cover.endsAt': ends },
+            {
+                'surprise.for': { $ne: email },
+                endsAt: ends,
+                $or: [{ visibility: 'public' as const }, { hostId: user.id }, { invitees: email }]
+            }
+        ]
+    };
+};
 
 const isTimeZone = (zone: string): boolean => {
     try {
@@ -75,32 +113,63 @@ const isTimeZone = (zone: string): boolean => {
 
 const dateTime = z.iso.datetime({ offset: true }).transform((value) => new Date(value));
 
-export const eventInput = z
-    .object({
-        title: z.string().trim().min(1).max(200),
-        description: z.string().trim().max(5000).default(''),
-        location: z.string().trim().max(500).default(''),
-        startsAt: dateTime,
-        endsAt: dateTime,
-        timeZone: z.string().refine(isTimeZone, 'Unknown time zone'),
-        visibility: z.enum(VISIBILITIES),
-        invitees: z
-            // Loose on purpose: test users like alice@test have no TLD, and Cognito checks real addresses.
-            .array(
-                z
-                    .string()
-                    .trim()
-                    .toLowerCase()
-                    .regex(/^[^\s@]+@[^\s@]+$/, 'Enter an email address')
-            )
-            .max(200)
-            .default([])
-    })
-    .refine((event) => event.endsAt > event.startsAt, {
+// Loose on purpose: test users like alice@test have no TLD, and Cognito checks real addresses.
+const email = z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^[^\s@]+@[^\s@]+$/, 'Enter an email address');
+
+const endsAfterStart = <S extends z.ZodType<{ startsAt: Date; endsAt: Date }>>(schema: S) =>
+    schema.refine((value) => value.endsAt > value.startsAt, {
         message: 'The event must end after it starts',
         path: ['endsAt']
     });
 
+const details = {
+    title: z.string().trim().min(1).max(200),
+    description: z.string().trim().max(5000).default(''),
+    location: z.string().trim().max(500).default(''),
+    startsAt: dateTime,
+    endsAt: dateTime
+};
+
+const timeZone = z.string().refine(isTimeZone, 'Unknown time zone');
+
+const surpriseInput = z.object({
+    for: z.array(email).min(1).max(20),
+    forName: z.string().trim().min(1).max(100),
+    cover: endsAfterStart(z.object({ ...details, timeZone }))
+});
+
+export const eventInput = endsAfterStart(
+    z.object({
+        ...details,
+        timeZone,
+        visibility: z.enum(VISIBILITIES),
+        invitees: z.array(email).max(200).default([]),
+        surprise: surpriseInput.nullable().default(null)
+    })
+);
+
 export type EventInput = z.output<typeof eventInput>;
 
 export const idParams = z.object({ id: z.string().min(1).max(100) });
+
+/**
+ * Turns validated input into the fields stored on an event: invitees only on private events, no
+ * duplicate emails, and never a surprise for the host, who'd see straight through it.
+ */
+export const storedFields = (input: EventInput, host: EventsUser) => {
+    const { surprise, invitees, ...rest } = input;
+    if (surprise?.for.includes(host.email.toLowerCase())) {
+        throw new BadRequestError('You can’t host your own surprise party', [
+            { path: 'surprise.for', message: 'Remove your own email' }
+        ]);
+    }
+    return {
+        ...rest,
+        invitees: input.visibility === 'private' ? [...new Set(invitees)] : [],
+        surprise: surprise ? { ...surprise, for: [...new Set(surprise.for)] } : null
+    };
+};

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { alice, bob, caller, carol, dave, testDb } from '../test/harness';
+import { alice, bob, caller, carol, dave, testDb, type TestUser } from '../test/harness';
 import { handler as cancelEvent } from './cancelEvent';
 import { handler as createEvent } from './createEvent';
 import { handler as deleteRsvp } from './deleteRsvp';
@@ -312,5 +312,228 @@ describe('editing and cancelling', () => {
         expect((await rsvp(event.id, bob, { response: 'going' })).status).toBe(409);
         expect((await update(event.id, alice, picnic)).status).toBe(409);
         expect((await cancel(event.id, alice)).body.cancelled).toBe(true);
+    });
+});
+
+describe('surprise parties', () => {
+    const cover = {
+        title: 'Quiet dinner',
+        description: 'Just us two',
+        location: 'Alice’s place',
+        startsAt: inDays(7, 1),
+        endsAt: inDays(7, 2),
+        timeZone: 'America/New_York'
+    };
+    const party = {
+        ...picnic,
+        title: 'Bob’s surprise party',
+        description: 'Hide behind the couch',
+        location: 'The big house',
+        surprise: { for: ['BOB@test', 'bob@test'], forName: 'Bob', cover }
+    };
+    const update = (id: string, body: unknown) =>
+        call(
+            updateEvent,
+            { method: 'PUT', path: '/events/:id' },
+            { user: alice, params: { id }, body }
+        );
+
+    it('shows the people it’s for only the cover story, as a public event in its own zone', async () => {
+        const event = await create({
+            ...party,
+            timeZone: 'America/Denver',
+            visibility: 'private',
+            invitees: ['carol@test']
+        });
+        await rsvp(event.id, carol, { response: 'going', note: 'Bringing cake' });
+        const expected = {
+            id: event.id,
+            title: 'Quiet dinner',
+            description: 'Just us two',
+            location: 'Alice’s place',
+            startsAt: cover.startsAt,
+            endsAt: cover.endsAt,
+            timeZone: 'America/New_York',
+            visibility: 'public',
+            host: { name: 'Alice', email: 'alice@test' },
+            isHost: false,
+            cancelled: false,
+            counts: { going: 0, maybe: 0, no: 0 },
+            myRsvp: null
+        };
+        // Exact matches, so any field added later has to be thought about for guests of honor.
+        expect(await get(event.id, bob)).toEqual({ status: 200, body: expected });
+        expect((await list(bob)).body).toEqual([expected]);
+        const mine = await rsvp(event.id, bob, { response: 'maybe' });
+        expect(mine.body).toEqual({
+            ...expected,
+            counts: { going: 0, maybe: 1, no: 0 },
+            myRsvp: { response: 'maybe', note: '' }
+        });
+    });
+
+    it('lets everyone else in on it, and only the host sees who it’s for by email', async () => {
+        const event = await create(party);
+        const guest = (await get(event.id, carol)).body;
+        expect(guest.title).toBe('Bob’s surprise party');
+        expect(guest.surprise).toEqual({ forName: 'Bob', cover });
+        const host = (await get(event.id, alice)).body;
+        expect(host.surprise).toEqual({ forName: 'Bob', for: ['bob@test'], cover });
+    });
+
+    it('shows the cover on a private event even to people it’s for who aren’t invited', async () => {
+        const event = await create({ ...party, visibility: 'private', invitees: ['carol@test'] });
+        expect((await get(event.id, bob)).body.title).toBe('Quiet dinner');
+        expect((await get(event.id, carol)).body.title).toBe('Bob’s surprise party');
+        expect((await get(event.id, dave)).status).toBe(404);
+        expect((await list(dave)).body).toEqual([]);
+        expect((await list(bob)).body.map((e: { title: string }) => e.title)).toEqual([
+            'Quiet dinner'
+        ]);
+    });
+
+    it('lists the cover by its own times', async () => {
+        // The real party already happened, but the cover dinner is still to come, and sorts
+        // before a picnic that's sooner than the real party but later than the cover.
+        await create({
+            ...party,
+            startsAt: inDays(-3),
+            endsAt: inDays(-3, 3),
+            surprise: {
+                ...party.surprise,
+                cover: { ...cover, startsAt: inDays(1), endsAt: inDays(1, 1) }
+            }
+        });
+        await create({ ...picnic, startsAt: inDays(2), endsAt: inDays(2, 1) });
+        const titles = async (user: TestUser, when: string) =>
+            (await list(user, when)).body.map((e: { title: string }) => e.title);
+        expect(await titles(bob, 'upcoming')).toEqual(['Quiet dinner', 'Picnic']);
+        expect(await titles(bob, 'past')).toEqual([]);
+        expect(await titles(carol, 'upcoming')).toEqual(['Picnic']);
+        expect(await titles(carol, 'past')).toEqual(['Bob’s surprise party']);
+    });
+
+    it('sorts past covers latest first', async () => {
+        await create({
+            ...party,
+            surprise: {
+                ...party.surprise,
+                cover: { ...cover, startsAt: inDays(-5), endsAt: inDays(-5, 1) }
+            }
+        });
+        await create({
+            ...picnic,
+            title: 'Old picnic',
+            startsAt: inDays(-2),
+            endsAt: inDays(-2, 1)
+        });
+        expect((await list(bob, 'past')).body.map((e: { title: string }) => e.title)).toEqual([
+            'Old picnic',
+            'Quiet dinner'
+        ]);
+    });
+
+    it('only counts the RSVPs of the people it’s for, for them', async () => {
+        const event = await create({
+            ...party,
+            surprise: { ...party.surprise, for: ['bob@test', 'dave@test'] }
+        });
+        await rsvp(event.id, carol, { response: 'going' });
+        await rsvp(event.id, alice, { response: 'maybe' });
+        const mine = await rsvp(event.id, bob, { response: 'going', note: 'Can’t wait' });
+        expect(mine.body).toMatchObject({
+            title: 'Quiet dinner',
+            counts: { going: 1, maybe: 0, no: 0 },
+            myRsvp: { response: 'going', note: 'Can’t wait' }
+        });
+        // Dave holds events:host, but still only sees who else it's a surprise for.
+        const daves = (await get(event.id, dave)).body;
+        expect(daves.counts).toEqual({ going: 1, maybe: 0, no: 0 });
+        expect(daves.rsvps.map((r: { email: string }) => r.email)).toEqual(['bob@test']);
+        expect((await list(dave)).body[0].counts).toEqual({ going: 1, maybe: 0, no: 0 });
+        const hosts = (await get(event.id, alice)).body;
+        expect(hosts.counts).toEqual({ going: 2, maybe: 1, no: 0 });
+        expect(hosts.rsvps).toHaveLength(3);
+    });
+
+    it('won’t make the host the guest of honor', async () => {
+        const res = await call(
+            createEvent,
+            { method: 'POST', path: '/events' },
+            {
+                user: alice,
+                body: { ...party, surprise: { ...party.surprise, for: ['Alice@test'] } }
+            }
+        );
+        expect(res.status).toBe(400);
+        expect(res.body.error.issues).toEqual([
+            { path: 'surprise.for', message: 'Remove your own email' }
+        ]);
+    });
+
+    it('checks the cover story', async () => {
+        const bad = async (surprise: unknown) =>
+            (
+                await call(
+                    createEvent,
+                    { method: 'POST', path: '/events' },
+                    { user: alice, body: { ...party, surprise } }
+                )
+            ).status;
+        expect(await bad({ ...party.surprise, for: [] })).toBe(400);
+        expect(await bad({ ...party.surprise, forName: ' ' })).toBe(400);
+        expect(await bad({ ...party.surprise, cover: { ...cover, endsAt: cover.startsAt } })).toBe(
+            400
+        );
+        expect(await bad({ ...party.surprise, cover: { ...cover, title: '' } })).toBe(400);
+    });
+
+    it('lets the host call the surprise off, after which everyone sees the real event', async () => {
+        const event = await create(party);
+        const res = await update(event.id, { ...party, surprise: null });
+        expect(res.status).toBe(200);
+        expect(res.body.surprise).toBeUndefined();
+        expect((await get(event.id, bob)).body.title).toBe('Bob’s surprise party');
+    });
+
+    it('lets the host turn an event into a surprise', async () => {
+        const event = await create();
+        await update(event.id, party);
+        expect((await get(event.id, bob)).body.title).toBe('Quiet dinner');
+    });
+});
+
+describe('uninvited guests', () => {
+    const update = (id: string, body: unknown) =>
+        call(
+            updateEvent,
+            { method: 'PUT', path: '/events/:id' },
+            { user: alice, params: { id }, body }
+        );
+
+    it('stops counting the RSVPs of guests who can no longer see the event', async () => {
+        const event = await create();
+        await rsvp(event.id, bob, { response: 'going' });
+        await rsvp(event.id, carol, { response: 'maybe' });
+        await rsvp(event.id, alice, { response: 'going' });
+        const res = await update(event.id, {
+            ...picnic,
+            visibility: 'private',
+            invitees: ['carol@test']
+        });
+        expect(res.body.counts).toEqual({ going: 1, maybe: 1, no: 0 });
+        expect(res.body.rsvps.map((r: { email: string }) => r.email)).toEqual([
+            'carol@test',
+            'alice@test'
+        ]);
+        expect((await list(carol)).body[0].counts).toEqual({ going: 1, maybe: 1, no: 0 });
+
+        // Invited again, their RSVP counts again.
+        const back = await update(event.id, {
+            ...picnic,
+            visibility: 'private',
+            invitees: ['carol@test', 'bob@test']
+        });
+        expect(back.body.counts).toEqual({ going: 2, maybe: 1, no: 0 });
     });
 });

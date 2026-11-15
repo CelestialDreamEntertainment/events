@@ -6,6 +6,7 @@ import {
     SegmentedControl,
     Select,
     Stack,
+    Switch,
     TagsInput,
     Text,
     Textarea,
@@ -29,6 +30,27 @@ type Fields = {
     timeZone: string;
     visibility: 'public' | 'private';
     invitees: string[];
+    surprise: boolean;
+    forName: string;
+    forEmails: string[];
+    coverTitle: string;
+    coverDescription: string;
+    coverLocation: string;
+    coverStarts: string;
+    coverEnds: string;
+    coverTimeZone: string;
+};
+
+const noSurprise = {
+    surprise: false,
+    forName: '',
+    forEmails: [],
+    coverTitle: '',
+    coverDescription: '',
+    coverLocation: '',
+    coverStarts: '',
+    coverEnds: '',
+    coverTimeZone: ''
 };
 
 const blank = (): Fields => ({
@@ -39,7 +61,8 @@ const blank = (): Fields => ({
     ends: '',
     timeZone: browserTimeZone(),
     visibility: 'public',
-    invitees: []
+    invitees: [],
+    ...noSurprise
 });
 
 const fromEvent = (event: EventDetail): Fields => ({
@@ -50,7 +73,20 @@ const fromEvent = (event: EventDetail): Fields => ({
     ends: isoToZoned(event.endsAt, event.timeZone),
     timeZone: event.timeZone,
     visibility: event.visibility,
-    invitees: event.invitees ?? []
+    invitees: event.invitees ?? [],
+    ...(event.surprise
+        ? {
+              surprise: true,
+              forName: event.surprise.forName,
+              forEmails: event.surprise.for ?? [],
+              coverTitle: event.surprise.cover.title,
+              coverDescription: event.surprise.cover.description,
+              coverLocation: event.surprise.cover.location,
+              coverStarts: isoToZoned(event.surprise.cover.startsAt, event.surprise.cover.timeZone),
+              coverEnds: isoToZoned(event.surprise.cover.endsAt, event.surprise.cover.timeZone),
+              coverTimeZone: event.surprise.cover.timeZone
+          }
+        : noSurprise)
 });
 
 const toBody = (fields: Fields): EventBody => ({
@@ -61,7 +97,21 @@ const toBody = (fields: Fields): EventBody => ({
     endsAt: zonedToIso(fields.ends, fields.timeZone),
     timeZone: fields.timeZone,
     visibility: fields.visibility,
-    invitees: fields.visibility === 'private' ? fields.invitees : []
+    invitees: fields.visibility === 'private' ? fields.invitees : [],
+    surprise: fields.surprise
+        ? {
+              for: fields.forEmails,
+              forName: fields.forName,
+              cover: {
+                  title: fields.coverTitle,
+                  description: fields.coverDescription,
+                  location: fields.coverLocation,
+                  startsAt: zonedToIso(fields.coverStarts, fields.coverTimeZone),
+                  endsAt: zonedToIso(fields.coverEnds, fields.coverTimeZone),
+                  timeZone: fields.coverTimeZone
+              }
+          }
+        : null
 });
 
 const Form = ({ initial, id }: { initial: Fields; id?: string }) => {
@@ -72,12 +122,26 @@ const Form = ({ initial, id }: { initial: Fields; id?: string }) => {
     const [saving, setSaving] = useState(false);
     const update = <K extends keyof Fields>(key: K, value: Fields[K]) =>
         setFields((f) => ({ ...f, [key]: value }));
+    // Turning a surprise on starts the cover story at the real time and place.
+    const setSurprise = (on: boolean) =>
+        setFields((f) => ({
+            ...f,
+            surprise: on,
+            coverStarts: f.coverStarts || f.starts,
+            coverEnds: f.coverEnds || f.ends,
+            coverTimeZone: f.coverTimeZone || f.timeZone,
+            coverLocation: f.coverLocation || f.location
+        }));
 
     const submit = async (e: FormEvent) => {
         e.preventDefault();
         setError(undefined);
         if (!fields.starts || !fields.ends) {
             setError('Pick a start and an end.');
+            return;
+        }
+        if (fields.surprise && (!fields.coverStarts || !fields.coverEnds)) {
+            setError('Pick a start and an end for the cover story.');
             return;
         }
         setSaving(true);
@@ -168,6 +232,80 @@ const Form = ({ initial, id }: { initial: Fields; id?: string }) => {
                         value={fields.invitees}
                         onChange={(invitees) => update('invitees', invitees)}
                     />
+                ) : null}
+                <Switch
+                    label="Surprise party"
+                    description="The people it’s for see a cover story instead of the real details."
+                    checked={fields.surprise}
+                    onChange={(e) => setSurprise(e.currentTarget.checked)}
+                />
+                {fields.surprise ? (
+                    <Stack>
+                        <TextInput
+                            label="Who it’s for"
+                            description="Everyone in on it sees this name."
+                            required
+                            maxLength={100}
+                            value={fields.forName}
+                            onChange={(e) => update('forName', e.currentTarget.value)}
+                        />
+                        <TagsInput
+                            label="Their emails"
+                            description="Their sign-in emails. They only ever see the cover story, even on a private event. Press Enter after each one."
+                            value={fields.forEmails}
+                            onChange={(emails) => update('forEmails', emails)}
+                        />
+                        <Title order={2} size="h4">
+                            The cover story
+                        </Title>
+                        <TextInput
+                            label="Cover title"
+                            required
+                            maxLength={200}
+                            value={fields.coverTitle}
+                            onChange={(e) => update('coverTitle', e.currentTarget.value)}
+                        />
+                        <Group grow>
+                            <TextInput
+                                label="Cover starts"
+                                type="datetime-local"
+                                required
+                                value={fields.coverStarts}
+                                onChange={(e) => update('coverStarts', e.currentTarget.value)}
+                            />
+                            <TextInput
+                                label="Cover ends"
+                                type="datetime-local"
+                                required
+                                value={fields.coverEnds}
+                                onChange={(e) => update('coverEnds', e.currentTarget.value)}
+                            />
+                        </Group>
+                        <Select
+                            label="Cover time zone"
+                            description="The zone they’ll see the cover times in."
+                            searchable
+                            data={TIME_ZONES}
+                            value={fields.coverTimeZone}
+                            // With allowDeselect off, Mantine never passes null here.
+                            onChange={(zone) => update('coverTimeZone', zone as string)}
+                            allowDeselect={false}
+                        />
+                        <TextInput
+                            label="Cover location"
+                            maxLength={500}
+                            value={fields.coverLocation}
+                            onChange={(e) => update('coverLocation', e.currentTarget.value)}
+                        />
+                        <Textarea
+                            label="Cover details"
+                            autosize
+                            minRows={2}
+                            maxLength={5000}
+                            value={fields.coverDescription}
+                            onChange={(e) => update('coverDescription', e.currentTarget.value)}
+                        />
+                    </Stack>
                 ) : null}
                 {error ? <Alert color="red">{error}</Alert> : null}
                 <Group>

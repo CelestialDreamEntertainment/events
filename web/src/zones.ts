@@ -45,4 +45,10 @@ export const isoToZoned = (iso: string, timeZone: string): string => {
 
 export const browserTimeZone = (): string => Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-export const TIME_ZONES: readonly string[] = Intl.supportedValuesOf('timeZone');
+/**
+ * Every zone to pick from. `Intl.supportedValuesOf` leaves out `UTC` and aliases such as
+ * `Asia/Calcutta`, so the browser's own zone is added in case it's one of those.
+ */
+export const TIME_ZONES: readonly string[] = [
+    ...new Set([...Intl.supportedValuesOf('timeZone'), 'UTC', browserTimeZone()])
+].sort();

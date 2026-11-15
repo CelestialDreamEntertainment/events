@@ -1,7 +1,7 @@
 # Events
 Scheduling for events I host with friends, part of the apps suite. Invited friends sign in to see events and RSVP.
 
-> **Status:** v1 runs locally (public and private events, invites, RSVPs). Nothing is deployed yet. Events is the first app, so the first version of the platform is built around what it needs. The shared design lives in the suite README (`../README.md`).
+> **Status:** v1 runs locally (public and private events, invites, RSVPs, surprise parties). Nothing is deployed yet. Events is the first app, so the first version of the platform is built around what it needs. The shared design lives in the suite README (`../README.md`).
 
 ## Addresses
 | Environment | URL |
@@ -26,6 +26,8 @@ Scheduling for events I host with friends, part of the apps suite. Invited frien
 - **Visibility:** a public event shows on the calendar for every `events:guest`. A private event shows only to its host and to the emails on its invite list, matched against the signed-in user's email. Anyone else gets a 404 for it, so private events don't leak by id.
 - **Hosting:** users with `events:host` create events. Only an event's own host edits or cancels it and sees its invite list. Cancelling keeps the event, marked cancelled, and stops new RSVPs.
 - **RSVPs:** going, maybe or not going, with an optional note. Guests see the counts and their own RSVP. Users with `events:host` also see everyone's RSVPs on events they can see.
+- **Uninvited guests:** if a guest loses access (removed from the invite list, or a public event goes private), their RSVP stops counting and drops off the host's list. It stays stored, so it comes back if they're invited again.
+- **Surprise parties:** a host can make any event a surprise for one or more people (by sign-in email), with a cover story: its own title, times, time zone, location and details. Those people see only the cover story, shown as a public event, even on a private event they aren't invited to, and their counts only include each other's RSVPs. Everyone else sees the real event, plus who it's for (by name) and the cover story, so nobody spoils it. Only the host sees the emails. A host can't make a surprise for themselves.
 - **Times:** stored as instants plus the event's IANA time zone, and shown in that zone.
 - **Data:** two collections, `events` and `rsvps` (one RSVP per event and user, id `${eventId}:${userId}`).
 

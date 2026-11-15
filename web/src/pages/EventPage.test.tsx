@@ -135,4 +135,51 @@ describe('EventPage', () => {
         });
         expect(await screen.findByText('Something broke')).toBeTruthy();
     });
+
+    it('lets guests in on a surprise and shows the host who it’s for', async () => {
+        const cover = {
+            title: 'Quiet dinner',
+            description: 'Just us',
+            location: 'Alice’s place',
+            startsAt: '2026-11-22T00:30:00.000Z',
+            endsAt: '2026-11-22T02:00:00.000Z',
+            timeZone: 'America/Chicago'
+        };
+        renderPage(<EventPage id="e1" />, {
+            fakes: {
+                'GET /events/:id': () =>
+                    detail({ isHost: true, surprise: { forName: 'Bob', for: ['bob@test'], cover } })
+            }
+        });
+        expect(await screen.findByText('It’s a surprise for Bob')).toBeTruthy();
+        expect(screen.getByText('Surprise')).toBeTruthy();
+        expect(screen.getByText('Quiet dinner')).toBeTruthy();
+        expect(screen.getByText('Alice’s place')).toBeTruthy();
+        expect(screen.getByText('Just us')).toBeTruthy();
+        expect(screen.getByText('Their emails: bob@test')).toBeTruthy();
+    });
+
+    it('shows a bare cover story to guests', async () => {
+        renderPage(<EventPage id="e1" />, {
+            user: BOB,
+            fakes: {
+                'GET /events/:id': () =>
+                    detail({
+                        surprise: {
+                            forName: 'Dave',
+                            cover: {
+                                title: 'Errands',
+                                description: '',
+                                location: '',
+                                startsAt: '2026-11-22T00:30:00.000Z',
+                                endsAt: '2026-11-22T02:00:00.000Z',
+                                timeZone: 'America/Chicago'
+                            }
+                        }
+                    })
+            }
+        });
+        expect(await screen.findByText('Errands')).toBeTruthy();
+        expect(screen.queryByText(/Their emails/)).toBeNull();
+    });
 });
