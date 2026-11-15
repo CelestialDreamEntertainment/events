@@ -87,8 +87,6 @@ export const eventView = (
     const isHost = event.hostId === user.id;
     const shared = {
         id: event._id,
-        timeZone: event.timeZone,
-        visibility: event.visibility,
         host: { name: event.hostName, email: event.hostEmail },
         cancelled: event.cancelledAt !== null,
         counts: countRsvps(rsvpsFor(event, user, rsvps)),
@@ -99,6 +97,9 @@ export const eventView = (
         const { cover } = event.surprise;
         return {
             ...shared,
+            // The cover passes for an ordinary public event, in its own time zone.
+            visibility: 'public',
+            timeZone: cover.timeZone,
             title: cover.title,
             description: cover.description,
             location: cover.location,
@@ -114,6 +115,8 @@ export const eventView = (
         location: event.location,
         startsAt: event.startsAt,
         endsAt: event.endsAt,
+        timeZone: event.timeZone,
+        visibility: event.visibility,
         isHost,
         ...(isHost ? { invitees: event.invitees } : {}),
         ...(event.surprise

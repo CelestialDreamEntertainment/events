@@ -148,7 +148,7 @@ export const EventPage = ({ id }: { id: string }) => {
                         {formatRange(
                             event.surprise.cover.startsAt,
                             event.surprise.cover.endsAt,
-                            event.timeZone
+                            event.surprise.cover.timeZone
                         )}
                     </Text>
                     {event.surprise.cover.location ? (

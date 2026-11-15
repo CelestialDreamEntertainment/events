@@ -142,7 +142,8 @@ describe('EventPage', () => {
             description: 'Just us',
             location: 'Alice’s place',
             startsAt: '2026-11-22T00:30:00.000Z',
-            endsAt: '2026-11-22T02:00:00.000Z'
+            endsAt: '2026-11-22T02:00:00.000Z',
+            timeZone: 'America/Chicago'
         };
         renderPage(<EventPage id="e1" />, {
             fakes: {
@@ -171,7 +172,8 @@ describe('EventPage', () => {
                                 description: '',
                                 location: '',
                                 startsAt: '2026-11-22T00:30:00.000Z',
-                                endsAt: '2026-11-22T02:00:00.000Z'
+                                endsAt: '2026-11-22T02:00:00.000Z',
+                                timeZone: 'America/Chicago'
                             }
                         }
                     })

@@ -321,7 +321,8 @@ describe('surprise parties', () => {
         description: 'Just us two',
         location: 'Alice’s place',
         startsAt: inDays(7, 1),
-        endsAt: inDays(7, 2)
+        endsAt: inDays(7, 2),
+        timeZone: 'America/New_York'
     };
     const party = {
         ...picnic,
@@ -337,39 +338,38 @@ describe('surprise parties', () => {
             { user: alice, params: { id }, body }
         );
 
-    it('shows the people it’s for only the cover story', async () => {
-        const event = await create(party);
-        const res = await get(event.id, bob);
-        expect(res.status).toBe(200);
-        expect(res.body).toMatchObject({
+    it('shows the people it’s for only the cover story, as a public event in its own zone', async () => {
+        const event = await create({
+            ...party,
+            timeZone: 'America/Denver',
+            visibility: 'private',
+            invitees: ['carol@test']
+        });
+        await rsvp(event.id, carol, { response: 'going', note: 'Bringing cake' });
+        const expected = {
+            id: event.id,
             title: 'Quiet dinner',
             description: 'Just us two',
             location: 'Alice’s place',
             startsAt: cover.startsAt,
             endsAt: cover.endsAt,
-            isHost: false
+            timeZone: 'America/New_York',
+            visibility: 'public',
+            host: { name: 'Alice', email: 'alice@test' },
+            isHost: false,
+            cancelled: false,
+            counts: { going: 0, maybe: 0, no: 0 },
+            myRsvp: null
+        };
+        // Exact matches, so any field added later has to be thought about for guests of honor.
+        expect(await get(event.id, bob)).toEqual({ status: 200, body: expected });
+        expect((await list(bob)).body).toEqual([expected]);
+        const mine = await rsvp(event.id, bob, { response: 'maybe' });
+        expect(mine.body).toEqual({
+            ...expected,
+            counts: { going: 0, maybe: 1, no: 0 },
+            myRsvp: { response: 'maybe', note: '' }
         });
-        const text = JSON.stringify(res.body);
-        for (const secret of ['surprise', 'couch', 'big house', 'Bob’s', picnic.startsAt]) {
-            expect(text).not.toContain(secret);
-        }
-        expect(Object.keys(res.body).sort()).toEqual(
-            [
-                'id',
-                'title',
-                'description',
-                'location',
-                'startsAt',
-                'endsAt',
-                'timeZone',
-                'visibility',
-                'host',
-                'isHost',
-                'cancelled',
-                'counts',
-                'myRsvp'
-            ].sort()
-        );
     });
 
     it('lets everyone else in on it, and only the host sees who it’s for by email', async () => {

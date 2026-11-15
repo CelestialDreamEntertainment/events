@@ -24,7 +24,8 @@ describe('EventsPage', () => {
                                 description: '',
                                 location: '',
                                 startsAt: '2026-11-22T00:30:00.000Z',
-                                endsAt: '2026-11-22T02:00:00.000Z'
+                                endsAt: '2026-11-22T02:00:00.000Z',
+                                timeZone: 'America/Chicago'
                             }
                         }
                     })

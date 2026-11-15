@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { ApiError } from '@sbwp/web';
 import { describe, expect, it } from 'vitest';
 import { detail, renderPage } from '../../test/render';
-import { browserTimeZone, zonedToIso } from '../zones';
+import { browserTimeZone } from '../zones';
 import { EditEventPage, NewEventPage } from './EventFormPage';
 
 const fillWhen = (starts: string, ends: string) => {
@@ -150,6 +150,11 @@ describe('surprise parties in the form', () => {
         await userEvent.clear(screen.getByLabelText('Cover location'));
         await userEvent.type(screen.getByLabelText('Cover location'), 'Alice’s place');
         await userEvent.type(screen.getByLabelText('Cover details'), 'Just us');
+        const zone = screen.getByRole('combobox', { name: 'Cover time zone' });
+        expect((zone as HTMLInputElement).value).toBe(browserTimeZone());
+        await userEvent.clear(zone);
+        await userEvent.type(zone, 'New_York');
+        await userEvent.click(await screen.findByRole('option', { name: 'America/New_York' }));
         await userEvent.click(screen.getByRole('button', { name: 'Create event' }));
         await screen.findByRole('button', { name: 'Create event' });
         expect(sent[0]).toMatchObject({
@@ -160,8 +165,9 @@ describe('surprise parties in the form', () => {
                     title: 'Quiet dinner',
                     description: 'Just us',
                     location: 'Alice’s place',
-                    startsAt: zonedToIso('2026-11-21T18:30', browserTimeZone()),
-                    endsAt: zonedToIso('2026-11-21T20:00', browserTimeZone())
+                    startsAt: '2026-11-21T23:30:00.000Z',
+                    endsAt: '2026-11-22T01:00:00.000Z',
+                    timeZone: 'America/New_York'
                 }
             }
         });
@@ -192,7 +198,8 @@ describe('surprise parties in the form', () => {
             description: 'Just us',
             location: 'Alice’s place',
             startsAt: '2026-11-22T00:30:00.000Z',
-            endsAt: '2026-11-22T02:00:00.000Z'
+            endsAt: '2026-11-22T02:00:00.000Z',
+            timeZone: 'America/New_York'
         };
         renderPage(<EditEventPage id="e1" />, {
             fakes: {
@@ -204,8 +211,11 @@ describe('surprise parties in the form', () => {
             'Quiet dinner'
         );
         expect((screen.getByLabelText(/^Cover starts/) as HTMLInputElement).value).toBe(
-            '2026-11-21T18:30'
+            '2026-11-21T19:30'
         );
+        expect(
+            (screen.getByRole('combobox', { name: 'Cover time zone' }) as HTMLInputElement).value
+        ).toBe('America/New_York');
         expect(screen.getByText('bob@test')).toBeTruthy();
     });
 

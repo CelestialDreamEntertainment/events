@@ -38,6 +38,7 @@ type Fields = {
     coverLocation: string;
     coverStarts: string;
     coverEnds: string;
+    coverTimeZone: string;
 };
 
 const noSurprise = {
@@ -48,7 +49,8 @@ const noSurprise = {
     coverDescription: '',
     coverLocation: '',
     coverStarts: '',
-    coverEnds: ''
+    coverEnds: '',
+    coverTimeZone: ''
 };
 
 const blank = (): Fields => ({
@@ -80,8 +82,9 @@ const fromEvent = (event: EventDetail): Fields => ({
               coverTitle: event.surprise.cover.title,
               coverDescription: event.surprise.cover.description,
               coverLocation: event.surprise.cover.location,
-              coverStarts: isoToZoned(event.surprise.cover.startsAt, event.timeZone),
-              coverEnds: isoToZoned(event.surprise.cover.endsAt, event.timeZone)
+              coverStarts: isoToZoned(event.surprise.cover.startsAt, event.surprise.cover.timeZone),
+              coverEnds: isoToZoned(event.surprise.cover.endsAt, event.surprise.cover.timeZone),
+              coverTimeZone: event.surprise.cover.timeZone
           }
         : noSurprise)
 });
@@ -103,8 +106,9 @@ const toBody = (fields: Fields): EventBody => ({
                   title: fields.coverTitle,
                   description: fields.coverDescription,
                   location: fields.coverLocation,
-                  startsAt: zonedToIso(fields.coverStarts, fields.timeZone),
-                  endsAt: zonedToIso(fields.coverEnds, fields.timeZone)
+                  startsAt: zonedToIso(fields.coverStarts, fields.coverTimeZone),
+                  endsAt: zonedToIso(fields.coverEnds, fields.coverTimeZone),
+                  timeZone: fields.coverTimeZone
               }
           }
         : null
@@ -125,6 +129,7 @@ const Form = ({ initial, id }: { initial: Fields; id?: string }) => {
             surprise: on,
             coverStarts: f.coverStarts || f.starts,
             coverEnds: f.coverEnds || f.ends,
+            coverTimeZone: f.coverTimeZone || f.timeZone,
             coverLocation: f.coverLocation || f.location
         }));
 
@@ -276,6 +281,16 @@ const Form = ({ initial, id }: { initial: Fields; id?: string }) => {
                                 onChange={(e) => update('coverEnds', e.currentTarget.value)}
                             />
                         </Group>
+                        <Select
+                            label="Cover time zone"
+                            description="The zone they’ll see the cover times in."
+                            searchable
+                            data={TIME_ZONES}
+                            value={fields.coverTimeZone}
+                            // With allowDeselect off, Mantine never passes null here.
+                            onChange={(zone) => update('coverTimeZone', zone as string)}
+                            allowDeselect={false}
+                        />
                         <TextInput
                             label="Cover location"
                             maxLength={500}

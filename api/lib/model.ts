@@ -14,6 +14,8 @@ export type Cover = {
     location: string;
     startsAt: Date;
     endsAt: Date;
+    /** The cover's own IANA time zone, so a trip out of town can pass for an evening at home. */
+    timeZone: string;
 };
 
 /**
@@ -132,16 +134,18 @@ const details = {
     endsAt: dateTime
 };
 
+const timeZone = z.string().refine(isTimeZone, 'Unknown time zone');
+
 const surpriseInput = z.object({
     for: z.array(email).min(1).max(20),
     forName: z.string().trim().min(1).max(100),
-    cover: endsAfterStart(z.object(details))
+    cover: endsAfterStart(z.object({ ...details, timeZone }))
 });
 
 export const eventInput = endsAfterStart(
     z.object({
         ...details,
-        timeZone: z.string().refine(isTimeZone, 'Unknown time zone'),
+        timeZone,
         visibility: z.enum(VISIBILITIES),
         invitees: z.array(email).max(200).default([]),
         surprise: surpriseInput.nullable().default(null)

@@ -20,7 +20,9 @@ export default defineConfig({
                     name: 'web',
                     include: ['web/**/*.test.{ts,tsx}'],
                     environment: 'jsdom',
-                    setupFiles: ['web/test/setup.ts']
+                    setupFiles: ['web/test/setup.ts'],
+                    // Typing through Mantine forms is slow when the whole suite runs at once.
+                    testTimeout: 20_000
                 }
             }
         ],

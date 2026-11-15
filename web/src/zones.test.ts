@@ -21,5 +21,7 @@ describe('zones', () => {
     it('knows the browser’s zone and the zone list', () => {
         expect(browserTimeZone()).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
         expect(TIME_ZONES).toContain('America/Chicago');
+        expect(TIME_ZONES).toContain('UTC');
+        expect(TIME_ZONES).toContain(browserTimeZone());
     });
 });
