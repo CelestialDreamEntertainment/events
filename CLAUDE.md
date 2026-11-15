@@ -2,7 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-The suite-wide `../CLAUDE.md` and the design in `../README.md` also apply. This repo is not scaffolded yet, so there are no commands. Add them here once they exist. Planned: `pnpm dev`, `pnpm test`, `pnpm lint`, `pnpm build`.
+The suite-wide `../CLAUDE.md` and the design in `../README.md` also apply.
+
+## Commands
+Tool versions come from `mise.toml`. The `@sbwp` packages come from `../platform` (`file:` dependencies) until they're on npm, so build platform first (`pnpm install && pnpm build` there) and re-run `pnpm install` here after changing it. From the repo root:
+- `pnpm dev`: local Mongo, API (4102) and Vite (5102) with fake sign-in
+- `pnpm test`: Vitest with 100% coverage. The `api` project runs handlers through the runtime wrapper against mongodb-memory-server; the `web` project runs in jsdom with fake auth and API clients from `@sbwp/web/testing`.
+- `pnpm lint`, `pnpm format`, `pnpm typecheck`, `pnpm build`
+- `pnpm types`: regenerate `api/routes.gen.ts` after changing routes. `pnpm typecheck` fails while it's stale.
 
 ## What this repo is
 The `events` app: frontend, backend, and IaC in one repo. See README.md for its addresses, scopes, and status.

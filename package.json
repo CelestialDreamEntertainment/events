@@ -1,0 +1,61 @@
+{
+    "name": "events",
+    "private": true,
+    "type": "module",
+    "packageManager": "pnpm@12.21.0",
+    "engines": {
+        "node": ">=24 <25"
+    },
+    "scripts": {
+        "dev": "sbwp dev",
+        "build": "sbwp build && vite build",
+        "types": "sbwp types",
+        "typecheck": "sbwp types --check && tsc -p tsconfig.json",
+        "lint": "eslint . && prettier --check .",
+        "format": "prettier --write .",
+        "test": "vitest run --coverage",
+        "test:watch": "vitest",
+        "prepare": "husky"
+    },
+    "lint-staged": {
+        "*.{ts,tsx,js,mjs,cjs}": [
+            "prettier --write",
+            "eslint --fix"
+        ],
+        "*.{json,yml,yaml,css}": "prettier --write"
+    },
+    "dependencies": {
+        "@mantine/core": "^9.8.0",
+        "@mantine/hooks": "^9.8.0",
+        "@sbwp/runtime": "file:../platform/packages/runtime",
+        "@sbwp/web": "file:../platform/packages/web",
+        "react": "^19.3.1",
+        "react-dom": "^19.3.1",
+        "wouter": "^3.13.0",
+        "zod": "^4.6.7"
+    },
+    "devDependencies": {
+        "@eslint/js": "^10.0.1",
+        "@sbwp/build": "file:../platform/packages/build",
+        "@testing-library/dom": "^10.4.2",
+        "@testing-library/react": "^16.3.3",
+        "@testing-library/user-event": "^14.6.10",
+        "@types/node": "^24.19.2",
+        "@types/react": "^19.3.0",
+        "@types/react-dom": "^19.3.0",
+        "@vitejs/plugin-react": "^6.3.0",
+        "@vitest/coverage-v8": "^5.1.0",
+        "eslint": "^10.15.0",
+        "eslint-config-prettier": "^10.1.8",
+        "globals": "^17.14.0",
+        "husky": "^9.1.7",
+        "jsdom": "^31.0.1",
+        "lint-staged": "^17.6.0",
+        "mongodb-memory-server": "11.3.0",
+        "prettier": "^3.10.1",
+        "typescript": "~6.0.3",
+        "typescript-eslint": "^8.72.2",
+        "vite": "^8.3.8",
+        "vitest": "^5.1.0"
+    }
+}
