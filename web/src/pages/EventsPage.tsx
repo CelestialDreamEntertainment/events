@@ -31,6 +31,7 @@ const EventCard = ({ event }: { event: EventSummary }) => (
             </Stack>
             <Group gap="xs">
                 {event.cancelled ? <Badge color="red">Cancelled</Badge> : null}
+                {event.surprise ? <Badge color="pink">Surprise</Badge> : null}
                 {event.visibility === 'private' ? <Badge variant="light">Private</Badge> : null}
                 {event.myRsvp ? (
                     <Badge variant="outline">{RESPONSE_LABELS[event.myRsvp.response]}</Badge>

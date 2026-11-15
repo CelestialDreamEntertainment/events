@@ -129,12 +129,43 @@ export const EventPage = ({ id }: { id: string }) => {
                 <Title order={1}>{event.title}</Title>
                 <Group gap="xs">
                     {event.cancelled ? <Badge color="red">Cancelled</Badge> : null}
+                    {event.surprise ? <Badge color="pink">Surprise</Badge> : null}
                     <Badge variant="light">
                         {event.visibility === 'private' ? 'Private' : 'Public'}
                     </Badge>
                 </Group>
             </Group>
             <Text>{formatRange(event.startsAt, event.endsAt, event.timeZone)}</Text>
+            {event.surprise ? (
+                <Alert color="pink" title={`It’s a surprise for ${event.surprise.forName}`}>
+                    <Text size="sm">
+                        Don’t spoil it. {event.surprise.forName} sees this instead:
+                    </Text>
+                    <Text size="sm" fw={600}>
+                        {event.surprise.cover.title}
+                    </Text>
+                    <Text size="sm">
+                        {formatRange(
+                            event.surprise.cover.startsAt,
+                            event.surprise.cover.endsAt,
+                            event.timeZone
+                        )}
+                    </Text>
+                    {event.surprise.cover.location ? (
+                        <Text size="sm">{event.surprise.cover.location}</Text>
+                    ) : null}
+                    {event.surprise.cover.description ? (
+                        <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
+                            {event.surprise.cover.description}
+                        </Text>
+                    ) : null}
+                    {event.surprise.for ? (
+                        <Text size="sm" c="dimmed">
+                            Their emails: {event.surprise.for.join(', ')}
+                        </Text>
+                    ) : null}
+                </Alert>
+            ) : null}
             {event.location ? <Text>{event.location}</Text> : null}
             {event.description ? (
                 <Text style={{ whiteSpace: 'pre-wrap' }}>{event.description}</Text>

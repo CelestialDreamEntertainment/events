@@ -1,6 +1,6 @@
 import { ForbiddenError, NotFoundError, type Context } from '@sbwp/runtime';
 import { canSee, collections, type EventDoc, type EventsUser } from './model';
-import { countRsvps, emptyCounts, eventView, rsvpView, type EventDetail } from './views';
+import { eventView, rsvpsFor, rsvpView, type EventDetail } from './views';
 
 /** Loads an event the user can see. Events they can't see are a 404, so their existence never leaks. */
 export const findVisible = async (
@@ -34,10 +34,9 @@ export const eventDetail = async (
         .rsvps.find({ eventId: event._id })
         .sort({ updatedAt: 1 })
         .toArray();
-    const counts = countRsvps(rsvps).get(event._id) ?? emptyCounts();
     const mine = rsvps.find((r) => r.userId === user.id);
     return {
-        ...eventView(event, user, counts, mine),
-        ...(user.has('events:host') ? { rsvps: rsvps.map(rsvpView) } : {})
+        ...eventView(event, user, rsvps, mine),
+        ...(user.has('events:host') ? { rsvps: rsvpsFor(event, user, rsvps).map(rsvpView) } : {})
     };
 };

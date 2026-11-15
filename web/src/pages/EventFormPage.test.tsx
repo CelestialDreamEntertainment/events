@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { ApiError } from '@sbwp/web';
 import { describe, expect, it } from 'vitest';
 import { detail, renderPage } from '../../test/render';
+import { browserTimeZone, zonedToIso } from '../zones';
 import { EditEventPage, NewEventPage } from './EventFormPage';
 
 const fillWhen = (starts: string, ends: string) => {
@@ -46,7 +47,8 @@ describe('NewEventPage', () => {
                 endsAt: '2026-11-22T03:00:00.000Z',
                 timeZone: 'America/Chicago',
                 visibility: 'private',
-                invitees: ['bob@test']
+                invitees: ['bob@test'],
+                surprise: null
             }
         ]);
         expect(location.history).toEqual(['/new', '/events/new-id']);
@@ -109,6 +111,119 @@ describe('NewEventPage', () => {
         const { location } = renderPage(<NewEventPage />, { path: '/new' });
         await userEvent.click(screen.getByRole('button', { name: 'Back' }));
         expect(location.history.at(-1)).toBe('/');
+    });
+});
+
+describe('surprise parties in the form', () => {
+    it('creates a surprise with a cover story that starts at the real time and place', async () => {
+        const sent: unknown[] = [];
+        renderPage(<NewEventPage />, {
+            fakes: {
+                'POST /events': (options) => {
+                    sent.push(options.body);
+                    return detail();
+                }
+            }
+        });
+        await userEvent.type(screen.getByLabelText(/^Title/), 'Bob’s party');
+        fillWhen('2026-11-21T18:00', '2026-11-21T21:00');
+        await userEvent.type(screen.getByLabelText('Location'), 'The big house');
+        await userEvent.click(screen.getByLabelText(/Surprise party/));
+        expect((screen.getByLabelText(/^Cover starts/) as HTMLInputElement).value).toBe(
+            '2026-11-21T18:00'
+        );
+        expect((screen.getByLabelText('Cover location') as HTMLInputElement).value).toBe(
+            'The big house'
+        );
+        await userEvent.type(screen.getByLabelText(/^Who it’s for/), 'Bob');
+        await userEvent.type(
+            screen.getByRole('combobox', { name: 'Their emails' }),
+            'bob@test{Enter}'
+        );
+        await userEvent.type(screen.getByLabelText(/^Cover title/), 'Quiet dinner');
+        fireEvent.change(screen.getByLabelText(/^Cover starts/), {
+            target: { value: '2026-11-21T18:30' }
+        });
+        fireEvent.change(screen.getByLabelText(/^Cover ends/), {
+            target: { value: '2026-11-21T20:00' }
+        });
+        await userEvent.clear(screen.getByLabelText('Cover location'));
+        await userEvent.type(screen.getByLabelText('Cover location'), 'Alice’s place');
+        await userEvent.type(screen.getByLabelText('Cover details'), 'Just us');
+        await userEvent.click(screen.getByRole('button', { name: 'Create event' }));
+        await screen.findByRole('button', { name: 'Create event' });
+        expect(sent[0]).toMatchObject({
+            surprise: {
+                for: ['bob@test'],
+                forName: 'Bob',
+                cover: {
+                    title: 'Quiet dinner',
+                    description: 'Just us',
+                    location: 'Alice’s place',
+                    startsAt: zonedToIso('2026-11-21T18:30', browserTimeZone()),
+                    endsAt: zonedToIso('2026-11-21T20:00', browserTimeZone())
+                }
+            }
+        });
+    });
+
+    it('keeps cover fields already filled in, and needs cover times', async () => {
+        renderPage(<NewEventPage />);
+        await userEvent.type(screen.getByLabelText(/^Title/), 'Party');
+        await userEvent.click(screen.getByLabelText(/Surprise party/));
+        await userEvent.type(screen.getByLabelText('Cover location'), 'Somewhere');
+        await userEvent.click(screen.getByLabelText(/Surprise party/));
+        expect(screen.queryByLabelText('Cover location')).toBeNull();
+        await userEvent.type(screen.getByLabelText('Location'), 'Elsewhere');
+        await userEvent.click(screen.getByLabelText(/Surprise party/));
+        expect((screen.getByLabelText('Cover location') as HTMLInputElement).value).toBe(
+            'Somewhere'
+        );
+        fillWhen('2026-11-21T18:00', '2026-11-21T21:00');
+        fireEvent.submit(screen.getByRole('button', { name: 'Create event' }));
+        expect(
+            await screen.findByText('Pick a start and an end for the cover story.')
+        ).toBeTruthy();
+    });
+
+    it('loads a surprise for editing', async () => {
+        const cover = {
+            title: 'Quiet dinner',
+            description: 'Just us',
+            location: 'Alice’s place',
+            startsAt: '2026-11-22T00:30:00.000Z',
+            endsAt: '2026-11-22T02:00:00.000Z'
+        };
+        renderPage(<EditEventPage id="e1" />, {
+            fakes: {
+                'GET /events/:id': () =>
+                    detail({ isHost: true, surprise: { forName: 'Bob', for: ['bob@test'], cover } })
+            }
+        });
+        expect(((await screen.findByLabelText(/^Cover title/)) as HTMLInputElement).value).toBe(
+            'Quiet dinner'
+        );
+        expect((screen.getByLabelText(/^Cover starts/) as HTMLInputElement).value).toBe(
+            '2026-11-21T18:30'
+        );
+        expect(screen.getByText('bob@test')).toBeTruthy();
+    });
+
+    it('loads a surprise without the emails for a host who isn’t this event’s', async () => {
+        renderPage(<EditEventPage id="e1" />, {
+            fakes: {
+                'GET /events/:id': () =>
+                    detail({
+                        surprise: {
+                            forName: 'Bob',
+                            cover: { ...detail(), description: '', location: '' }
+                        }
+                    })
+            }
+        });
+        expect(((await screen.findByLabelText(/^Who it’s for/)) as HTMLInputElement).value).toBe(
+            'Bob'
+        );
     });
 });
 
